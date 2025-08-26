@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aquatic Plant Care Kiosk</title>
+  <!-- iPad / PWA friendliness -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0ea5e9" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap">
+  <script>
+    // Register a minimal service worker for add-to-home-screen niceties.
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(()=>{});
+      });
+    }
+  </script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>body{font-family:Inter,system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif}</style>
+</head>
+<body class="bg-slate-50">
+  <div id="root"></div>
+
+  <script type="text/javascript">
+  const { useState, useMemo, useEffect } = React;
+
+  // Edit your plant list here.
+  const PLANTS = [
+    {"name":"Anubias barteri","light":"Low","co2":"Optional","temperature":"72–82°F (22–28°C)","ph":"6.0–7.5","hardness":"3–12 dGH","difficulty":"Easy","placement":"Midground","care":"Attach rhizome to rock/wood; do not bury. Slow grower; trim old leaves; prefers gentle flow.","notes":"Propagate by dividing rhizome. Good for low‑tech tanks and shaded areas; tolerant of mild algae scraping."},
+    {"name":"Microsorum pteropus (Java Fern)","light":"Low","co2":"Optional","temperature":"68–80°F (20–27°C)","ph":"6.0–7.5","hardness":"3–12 dGH","difficulty":"Easy","placement":"Midground","care":"Attach rhizome to hardscape; avoid burying. Trim damaged leaves. Hardy and beginner‑friendly.","notes":"Propagates via plantlets on leaves. Tolerates cooler water; good in low light community tanks."},
+    {"name":"Echinodorus bleheri (Amazon Sword)","light":"Medium","co2":"Optional","temperature":"72–82°F (22–28°C)","ph":"6.5–7.8","hardness":"4–18 dGH","difficulty":"Easy","placement":"Background","care":"Heavy root feeder—use nutrient‑rich substrate or root tabs. Remove older leaves to shape.","notes":"Can grow large; provide space. Propagates via runners/flower stalks. Great centerpiece in 20+ gallons."},
+    {"name":"Eleocharis acicularis (Dwarf Hairgrass)","light":"High","co2":"Recommended","temperature":"68–78°F (20–26°C)","ph":"6.0–7.2","hardness":"2–10 dGH","difficulty":"Moderate","placement":"Foreground","care":"Plant small clumps spaced ~1–2 in apart. Needs strong light/flow; trim regularly to densify.","notes":"Carpeting plant; benefits from CO₂ and stable nutrients (NO₃ 10–20 ppm, PO₄ 1–2 ppm)."},
+    {"name":"Hygrophila difformis (Water Wisteria)","light":"Medium","co2":"Optional","temperature":"72–82°F (22–28°C)","ph":"6.5–7.5","hardness":"4–15 dGH","difficulty":"Easy","placement":"Midground","care":"Fast grower; trim tops and replant stem cuttings. Great nitrate sponge and algae competitor.","notes":"Can be used as a floating plant temporarily to boost growth. Watch for calcium deficiency (twisted leaves)."},
+    {"name":"Ceratophyllum demersum (Hornwort)","light":"Low","co2":"None","temperature":"59–86°F (15–30°C)","ph":"6.0–7.5","hardness":"5–15 dGH","difficulty":"Easy","placement":"Floating","care":"Usually floated; can be loosely anchored. Sheds needles if shocked—acclimate gently.","notes":"Great for fry and nutrient uptake. Trim frequently; can be messy if disturbed."},
+    {"name":"Rotala rotundifolia","light":"Medium","co2":"Recommended","temperature":"70–80°F (21–27°C)","ph":"6.0–7.2","hardness":"3–10 dGH","difficulty":"Moderate","placement":"Background","care":"Provide good light and CO₂ for compact, colorful growth. Trim tops; replant cuttings for thicker bushes.","notes":"Turns pink/red under higher light and iron dosing; maintain good flow to prevent shading die‑off."}
+  ];
+
+  const DIFFICULTIES = ["Easy","Moderate","Advanced"];
+
+  function InfoRow({ label, value }) {
+    if (!value) return null;
+    return React.createElement(
+      "div",
+      { className: "flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2 border border-slate-200" },
+      React.createElement("span", { className: "font-medium text-slate-700" }, label),
+      React.createElement("span", { className: "text-slate-700" }, value)
+    );
+  }
+
+  function App() {
+    const [query, setQuery] = useState("");
+    const [difficulty, setDifficulty] = useState("All");
+    const [active, setActive] = useState(null);
+    const [gridSize, setGridSize] = useState("Comfort");
+    const [fullscreen, setFullscreen] = useState(false);
+
+    const toggleFullscreen = async () => {
+      try {
+        if (!document.fullscreenElement) {
+          await document.documentElement.requestFullscreen();
+          setFullscreen(true);
+        } else {
+          await document.exitFullscreen();
+          setFullscreen(false);
+        }
+      } catch (e) {
+        setFullscreen(!fullscreen);
+      }
+    };
+
+    const filtered = useMemo(() => {
+      const q = query.trim().toLowerCase();
+      return PLANTS.filter((p) => {
+        const matchesQ = !q
+          || p.name.toLowerCase().includes(q)
+          || p.care.toLowerCase().includes(q)
+          || (p.notes || "").toLowerCase().includes(q);
+        const matchesDiff = difficulty === "All" || p.difficulty === difficulty;
+        return matchesQ && matchesDiff;
+      }).sort((a, b) => a.name.localeCompare(b.name));
+    }, [query, difficulty]);
+
+    // Gentle keep-alive (helps some kiosk setups)
+    useEffect(() => {
+      const id = setInterval(() => {}, 60000);
+      return () => clearInterval(id);
+    }, []);
+
+    return React.createElement(
+      "div",
+      { className: "min-h-screen bg-slate-50 text-slate-900 p-4 md:p-8 select-none" },
+      React.createElement(
+        "div",
+        { className: "mx-auto max-w-6xl flex items-center justify-between gap-4 mb-4" },
+        React.createElement(
+          "div",
+          null,
+          React.createElement("h1", { className: "text-2xl md:text-3xl font-extrabold tracking-tight" }, "Aquatic Plant Care"),
+          React.createElement("p", { className: "text-sm md:text-base text-slate-600" }, "Tap a plant to view simple care instructions.")
+        ),
+        React.createElement(
+          "div",
+          { className: "flex items-center gap-2" },
+          React.createElement(
+            "button",
+            { onClick: toggleFullscreen, className: "px-3 py-2 rounded-2xl shadow bg-white hover:shadow-md active:scale-[0.98]" },
+            fullscreen ? "Exit Full Screen" : "Full Screen"
+          )
+        )
+      ),
+      React.createElement(
+        "div",
+        { className: "mx-auto max-w-6xl grid grid-cols-1 md:grid-cols-3 gap-3 mb-4" },
+        React.createElement("input", {
+          value: query,
+          onChange: (e) => setQuery(e.target.value),
+          placeholder: "Search plants or care keywords…",
+          className: "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow focus:outline-none focus:ring-2 focus:ring-sky-300"
+        }),
+        React.createElement(
+          "div",
+          { className: "flex gap-2" },
+          React.createElement(
+            "select",
+            { value: difficulty, onChange: (e) => setDifficulty(e.target.value), className: "flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow focus:outline-none focus:ring-2 focus:ring-sky-300" },
+            React.createElement("option", { value: "All" }, "All difficulty"),
+            DIFFICULTIES.map((d) => React.createElement("option", { key: d, value: d }, d))
+          ),
+          React.createElement(
+            "select",
+            { value: gridSize, onChange: (e) => setGridSize(e.target.value), className: "rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow focus:outline-none focus:ring-2 focus:ring-sky-300" },
+            React.createElement("option", null, "Comfort"),
+            React.createElement("option", null, "Compact")
+          )
+        ),
+        React.createElement(
+          "button",
+          { onClick: () => { setQuery(""); setDifficulty("All"); }, className: "rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow hover:shadow-md" },
+          "Clear Filters"
+        )
+      ),
+      React.createElement(
+        "div",
+        { className: "mx-auto max-w-6xl grid gap-3 " + (gridSize === "Compact" ? "grid-cols-2 md:grid-cols-4" : "grid-cols-2 md:grid-cols-3") },
+        filtered.map((p) =>
+          React.createElement(
+            "button",
+            { key: p.name, onClick: () => setActive(p), className: "text-left rounded-3xl bg-white p-4 md:p-5 shadow hover:shadow-md active:scale-[0.99] border border-slate-200" },
+            React.createElement(
+              "div",
+              { className: "flex items-center justify-between" },
+              React.createElement("h3", { className: "font-semibold text-lg md:text-xl leading-tight pr-2" }, p.name),
+              React.createElement(
+                "span",
+                { className:
+                    "text-xs md:text-sm px-2 py-1 rounded-full border " +
+                    (p.difficulty === "Easy"
+                      ? "bg-green-50 border-green-200"
+                      : p.difficulty === "Moderate"
+                      ? "bg-amber-50 border-amber-200"
+                      : "bg-rose-50 border-rose-200")
+                },
+                p.difficulty
+              )
+            ),
+            React.createElement(
+              "div",
+              { className: "mt-2 text-sm text-slate-600" },
+              React.createElement("div", null, "Light: ", p.light),
+              React.createElement("div", null, "CO₂: ", p.co2),
+              p.placement ? React.createElement("div", null, "Placement: ", p.placement) : null
+            )
+          )
+        ),
+        filtered.length === 0 && React.createElement(
+          "div",
+          { className: "col-span-full text-center text-slate-500 py-16" },
+          "No plants found. Try clearing filters or searching a simpler term."
+        )
+      ),
+      active && React.createElement(
+        "div",
+            { className: "fixed inset-0 z-50 grid place-items-center bg-black/40 p-4", onClick: () => setActive(null) },
+            React.createElement(
+              "div",
+              { className: "w-full max-w-2xl rounded-3xl bg-white shadow-2xl border border-slate-200", onClick: (e) => e.stopPropagation() },
+              React.createElement(
+                "div",
+                { className: "flex items-center justify-between p-4 md:p-5 border-b border-slate-100" },
+                React.createElement("h2", { className: "text-xl md:text-2xl font-bold" }, active.name),
+                React.createElement("button", { onClick: () => setActive(null), className: "rounded-full px-3 py-1 bg-slate-100 hover:bg-slate-200", "aria-label": "Close" }, "Close")
+              ),
+              React.createElement(
+                "div",
+                { className: "p-4 md:p-6 grid grid-cols-1 md:grid-cols-2 gap-4" },
+                React.createElement(
+                  "div",
+                  { className: "space-y-2 text-sm" },
+                  React.createElement(InfoRow, { label: "Light", value: active.light }),
+                  React.createElement(InfoRow, { label: "CO₂", value: active.co2 }),
+                  React.createElement(InfoRow, { label: "Temperature", value: active.temperature }),
+                  React.createElement(InfoRow, { label: "pH", value: active.ph }),
+                  active.hardness ? React.createElement(InfoRow, { label: "Hardness", value: active.hardness }) : null,
+                  active.placement ? React.createElement(InfoRow, { label: "Placement", value: active.placement }) : null,
+                  React.createElement(InfoRow, { label: "Difficulty", value: active.difficulty })
+                ),
+                React.createElement(
+                  "div",
+                  null,
+                  React.createElement("h3", { className: "font-semibold mb-1" }, "Care Summary"),
+                  React.createElement("p", { className: "text-sm text-slate-700 leading-relaxed" }, active.care),
+                  active.notes && React.createElement(
+                    React.Fragment,
+                    null,
+                    React.createElement("h3", { className: "font-semibold mt-4 mb-1" }, "Notes"),
+                    React.createElement("p", { className: "text-sm text-slate-700 leading-relaxed" }, active.notes)
+                  )
+                )
+              ),
+              React.createElement(
+                "div",
+                { className: "flex items-center justify-end gap-2 p-4 md:p-5 border-t border-slate-100" },
+                React.createElement(
+                  "button",
+                  { className: "rounded-2xl bg-slate-100 px-4 py-2 hover:bg-slate-200",
+                    onClick: () => navigator.share && navigator.share({ title: active.name, text: active.name + " care: " + active.care }).catch(() => {}) },
+                  "Share"
+                ),
+                React.createElement(
+                  "button",
+                  { className: "rounded-2xl bg-sky-600 text-white px-4 py-2 hover:bg-sky-700",
+                    onClick: () => setActive(null) },
+                  "Done"
+                )
+              )
+            )
+          ),
+      React.createElement(
+        "div",
+        { className: "mx-auto max-w-6xl text-center text-xs text-slate-500 mt-8" },
+        "Tip: On iPad Safari, open from the Share menu and choose ",
+        React.createElement("b", null, "Add to Home Screen"),
+        " for kiosk‑style use."
+      )
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+  </script>
+</body>
+</html>
